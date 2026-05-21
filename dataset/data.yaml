@@ -1,0 +1,5 @@
+train: C:/Users/Admin/Desktop/Ai/dataset/train/images
+val: C:/Users/Admin/Desktop/Ai/dataset/valid/images
+
+nc: 1
+names: ['pothole']

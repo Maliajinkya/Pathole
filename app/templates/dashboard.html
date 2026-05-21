@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pothole Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f4f4f4; }
+    h1 { color: #333; }
+    .stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .card { background: white; padding: 20px; border-radius: 10px; flex: 1; min-width: 120px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    .card h2 { margin: 0; font-size: 2rem; }
+    .card p  { margin: 4px 0 0; color: #666; font-size: 14px; }
+    #map { height: 400px; border-radius: 10px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    th { background: #e74c3c; color: white; padding: 12px; text-align: left; }
+    td { padding: 10px 12px; border-bottom: 1px solid #eee; }
+    .badge { padding: 3px 10px; border-radius: 12px; color: white; font-size: 12px; }
+    .small  { background: #27ae60; }
+    .medium { background: #f39c12; }
+    .large  { background: #e74c3c; }
+    .pending { background: #e67e22; }
+    .fixed   { background: #27ae60; }
+    button.fix-btn { padding: 4px 10px; background: #27ae60; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>📊 Pothole Dashboard</h1>
+  <a href="/">← Back to Upload</a>
+
+  <div class="stats" id="stats"></div>
+  <div id="map"></div>
+  <table>
+    <thead><tr><th>Time</th><th>Severity</th><th>Confidence</th><th>Location</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map("map").setView([18.6278, 73.8131], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+    const colors = { small: "green", medium: "orange", large: "red" };
+
+    async function load() {
+      const [detRes, statRes] = await Promise.all([
+        fetch("/api/detections"), fetch("/api/stats")
+      ]);
+      const detections = await detRes.json();
+      const stats      = await statRes.json();
+
+      // Stats cards
+      document.getElementById("stats").innerHTML = `
+        <div class="card"><h2>${stats.total}</h2><p>Total</p></div>
+        <div class="card"><h2>${stats.pending}</h2><p>Pending</p></div>
+        <div class="card"><h2>${stats.fixed}</h2><p>Fixed</p></div>
+        <div class="card"><h2>${stats.by_severity?.large || 0}</h2><p>Dangerous</p></div>
+      `;
+
+      // Map markers + table rows
+      const tbody = document.getElementById("tbody");
+      tbody.innerHTML = "";
+      detections.forEach(d => {
+        if (d.lat && d.lng) {
+          const circle = L.circleMarker([d.lat, d.lng], {
+            radius: 10,
+            color: colors[d.severity] || "gray",
+            fillOpacity: 0.8
+          }).addTo(map);
+          circle.bindPopup(
+            `<b>${d.severity.toUpperCase()}</b><br>
+             Confidence: ${(d.confidence*100).toFixed(1)}%<br>
+             ${new Date(d.timestamp).toLocaleString()}<br>
+             Status: ${d.status}`
+          );
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${new Date(d.timestamp).toLocaleString()}</td>
+            <td><span class="badge ${d.severity}">${d.severity}</span></td>
+            <td>${(d.confidence*100).toFixed(1)}%</td>
+            <td>${d.lat ? d.lat.toFixed(4)+", "+d.lng.toFixed(4) : "—"}</td>
+            <td><span class="badge ${d.status}">${d.status}</span></td>
+            <td>
+              ${d.status === "pending"
+                ? `<button class="fix-btn" onclick="markFixed(${d.id})">Mark Fixed</button>`
+                : "✅"}
+            </td>
+          </tr>`;
+      });
+    }
+
+    async function markFixed(id) {
+      await fetch(`/api/detections/${id}/status?status=fixed`, { method: "PATCH" });
+      load();
+    }
+
+    load();
+    setInterval(load, 30000); // auto-refresh every 30s
+  </script>
+</body>
+</html>

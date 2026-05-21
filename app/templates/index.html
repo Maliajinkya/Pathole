@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pothole Detection</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
+    h1 { color: #333; }
+    input, button { margin: 8px 0; padding: 10px; width: 100%; box-sizing: border-box; }
+    button { background: #e74c3c; color: white; border: none; cursor: pointer; font-size: 16px; }
+    button:hover { background: #c0392b; }
+    #result { margin-top: 20px; padding: 15px; background: #f8f8f8; border-radius: 8px; display: none; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; color: white; font-size: 13px; }
+    .small  { background: #27ae60; }
+    .medium { background: #f39c12; }
+    .large  { background: #e74c3c; }
+  </style>
+</head>
+<body>
+  <h1>🚧 Pothole Detection</h1>
+  <p>Upload a road image to detect potholes.</p>
+
+  <input type="file" id="imageInput" accept="image/*">
+
+  <div>
+    <label>Your Location (optional — click map or enter manually)</label>
+    <input type="number" id="lat" placeholder="Latitude  e.g. 18.6278" step="any">
+    <input type="number" id="lng" placeholder="Longitude e.g. 73.8131" step="any">
+    <button onclick="useMyLocation()">📍 Use My Current Location</button>
+  </div>
+
+  <button onclick="detect()">🔍 Detect Potholes</button>
+
+  <div id="result">
+    <h3>Results</h3>
+    <div id="output"></div>
+  </div>
+
+  <p><a href="/dashboard">📊 View Dashboard</a> | <a href="/docs">📖 API Docs</a></p>
+
+  <script>
+    function useMyLocation() {
+      if (!navigator.geolocation) return alert("Geolocation not supported");
+      navigator.geolocation.getCurrentPosition(pos => {
+        document.getElementById("lat").value = pos.coords.latitude.toFixed(6);
+        document.getElementById("lng").value = pos.coords.longitude.toFixed(6);
+        alert("Location captured: " + pos.coords.latitude.toFixed(4) + ", " + pos.coords.longitude.toFixed(4));
+      }, () => alert("Could not get location"));
+    }
+
+    async function detect() {
+      const file = document.getElementById("imageInput").files[0];
+      if (!file) return alert("Please select an image first");
+
+      const form = new FormData();
+      form.append("image", file);
+
+      const lat = document.getElementById("lat").value;
+      const lng = document.getElementById("lng").value;
+      if (lat) form.append("lat", lat);
+      if (lng) form.append("lng", lng);
+
+      const btn = document.querySelector("button:last-of-type");
+      btn.textContent = "Detecting...";
+      btn.disabled = true;
+
+      try {
+        const res  = await fetch("/api/detect", { method: "POST", body: form });
+        const data = await res.json();
+        const out  = document.getElementById("output");
+        document.getElementById("result").style.display = "block";
+
+        if (data.count === 0) {
+          out.innerHTML = "<p>✅ No potholes detected.</p>";
+        } else {
+          out.innerHTML = `<p>Found <strong>${data.count}</strong> pothole(s):</p>` +
+            data.detections.map(d =>
+              `<p>
+                <span class="badge ${d.severity}">${d.severity.toUpperCase()}</span>
+                Confidence: ${(d.confidence * 100).toFixed(1)}%
+                ${d.lat ? ` | 📍 ${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}` : ""}
+              </p>`
+            ).join("");
+        }
+      } catch (e) {
+        alert("Error: " + e.message);
+      } finally {
+        btn.textContent = "🔍 Detect Potholes";
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
